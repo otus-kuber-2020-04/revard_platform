@@ -1,0 +1,23 @@
+apiVersion: v1 
+kind: Pod 
+metadata:
+  name: web 
+  labels: 
+    key: app
+spec:
+  containers: 
+  - name: web 
+    image: revard/otus-k8s-nginx-noroot:latest 
+    volumeMounts:
+      - name: app
+        mountPath: /app
+  initContainers:
+  - name: init-myservice
+    image: busybox:1.31.0
+    command: ['sh', '-c', 'wget -O- https://tinyurl.com/otus-k8s-intro | sh']
+    volumeMounts:
+    - name: app
+      mountPath: /app
+  volumes:
+  - name: app
+    emptyDir: {}
