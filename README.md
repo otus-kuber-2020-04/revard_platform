@@ -1,5 +1,4 @@
-# Otus Kubernete course
-revard Platform repository
+# Otus Kubernetes course
 
 ## HW-2 Kubernetes Intro
 
@@ -254,7 +253,7 @@ alf@alf-pad:~/revard_platform/kubernetes-intro (master)
 
 ### Torubleshooting
 
-Try find out what is rong with frontend pod.
+Try find out what is wrong with frontend pod.
 
 Let`s see status:
 ```
