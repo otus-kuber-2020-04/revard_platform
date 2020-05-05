@@ -1,6 +1,6 @@
 # Otus Kubernetes course
 
-## HW-2 Kubernetes Intro
+## HW-1 Kubernetes Intro
 
 ### Install
 
