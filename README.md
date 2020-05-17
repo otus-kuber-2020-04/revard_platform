@@ -8,11 +8,11 @@ Clone repo. Cd in dir `kubernetes-controllers`. Run commands bellow.
 
 ### Kind 
 
-* Install 
+##### Install 
 
 https://kind.sigs.k8s.io/docs/user/quick-start/
 
-* Start 
+##### Start 
 ```
 └─$> kind create cluster --config kind-config.yaml
 Creating cluster "kind" ...
@@ -33,7 +33,7 @@ kubectl cluster-info --context kind-kind
 Thanks for using kind! 😊
 ```
 
-* Status
+##### Status
 ```
 └─$> kubectl get nodes
 NAME                  STATUS   ROLES    AGE     VERSION
@@ -51,7 +51,7 @@ kind-worker3          Ready    <none>   2m13s   v1.18.2
 
 https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 
-* Create
+##### Create
 ```
 ─$> kubectl apply -f ./frontend-replicaset.yaml
 replicaset.apps/frontend created
@@ -70,7 +70,7 @@ NAME       DESIRED   CURRENT   READY   AGE
 frontend   3         3         3       2m16s
 ```
 
-* Try delete and get rise again
+##### Try delete and get rise again
 ```
 └─$> kubectl delete pods -l app=frontend | kubectl get pods -l app=frontend -w
 ...
@@ -82,7 +82,7 @@ frontend-8wt4p   1/1     Running   0          66s
 frontend-h9hbv   1/1     Running   0          66s
 ```
 
-* Change image version
+##### Change image version
 
 We edit in `frontend-replicaset.yaml` docker image version and aplly it but nothing happend.
 
@@ -111,7 +111,7 @@ revard/otus-k8s-frontend:v0.0.2
 
 #### Deployment
 
-* Aplly
+##### Aplly
 ```
 └─$> kubectl apply -f ./paymentservice-deployment.yaml
 deployment.apps/paymentservice created
@@ -134,7 +134,7 @@ paymentservice-bdf74f647-htvll   1/1     Running   0          90s
 paymentservice-bdf74f647-qmc64   1/1     Running   0          90s
 ```
 
-* Rolling Update (default). Let`s change version in deployment manifest and apply. 
+##### Rolling Update (default). Let`s change version in deployment manifest and apply. 
 ```
 alf@alf-pad:~/revard_platform/kubernetes-controllers (kubernetes-controllers) 
 └─$> kubectl apply -f paymentservice-deployment.yaml 
@@ -150,7 +150,8 @@ revard/otus-k8s-paymentservice:v0.0.2
 revard/otus-k8s-paymentservice:v0.0.1
 
 ```
-* History
+
+##### History
 ```
 └─$> kubectl rollout history deployment paymentservice
 deployment.apps/paymentservice 
@@ -159,7 +160,7 @@ REVISION  CHANGE-CAUSE
 2         <none>
 ```
 
-* Rollback
+##### Rollback
 ```
 └─$> kubectl rollout undo deployment paymentservice --to-revision=1 | kubectl get rs -l app=paymentservice -w
 ...
@@ -170,7 +171,7 @@ paymentservice-7d745d469d   0         0         0       15m
 paymentservice-bdf74f647    3         3         3       18m
 ```
 
-* Deployment strategy
+##### Deployment strategy
 
 We can use `Max Surge` and `Max Unavailable` parameters. 
 
@@ -184,7 +185,7 @@ Reverse Rolling Update in `paymentservice-deployment-reverse.yaml`
 
 https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 
-* Check status
+##### Check status
 ```
 └─$> kubectl describe pod | grep Readiness
     Readiness:      http-get http://:8080/_healthz delay=10s timeout=1s period=10s #success=1 #failure=3
@@ -192,7 +193,7 @@ https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-read
     Readiness:      http-get http://:8080/_healthz delay=10s timeout=1s period=10s #success=1 #failure=3
 ```
 
-* Wrong probe example
+##### Wrong probe example
 ```
 ─$> kubectl get pod 
 NAME                        READY   STATUS    RESTARTS   AGE
@@ -210,7 +211,7 @@ Events:
   Warning  Unhealthy  4s (x2 over 14s)  kubelet, kind-worker  Readiness probe failed: HTTP probe failed with statuscode: 404  
 ```
 
-* Deployment status
+##### Deployment status
 ```
 └─$> kubectl rollout status deployment/frontend
 Waiting for deployment "frontend" rollout to finish: 1 out of 3 new replicas have been updated...
@@ -224,8 +225,7 @@ Waiting for deployment "frontend" rollout to finish: 1 old replicas are pending 
 deployment "frontend" successfully rolled out
 ```
 
-* Probe status examples fot GitLab CI/CD
-
+##### Probe status examples fot GitLab CI/CD
 ```
 deploy_job:
 stage: deploy
@@ -266,7 +266,7 @@ node-exporter-r46xc         2/2     Running   0          2m36s
 node-exporter-r7gth         2/2     Running   0          2m36s
 ```
 
-* Test. Forward port and get all ok.
+##### Test. Forward port and get all ok.
 ```
 └─$> kubectl port-forward node-exporter-d2xkf 9100:9100
 Forwarding from 127.0.0.1:9100 -> 9100
