@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paymentservice-bg
+  labels:
+    app: paymentservice-bg
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: paymentservice-bg
+  strategy:
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 0%
+  template:
+    metadata:
+      labels:
+        app: paymentservice-bg
+    spec:
+      containers:
+        - name: server
+          image: revard/otus-k8s-paymentservice:v0.0.2
