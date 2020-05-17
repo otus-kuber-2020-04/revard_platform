@@ -1,5 +1,318 @@
 # Otus Kubernetes course
 
+## HW-2 Kubernetes controllers
+
+### How to use
+
+Clone repo. Cd in dir `kubernetes-controllers`. Run commands bellow.
+
+### Kind 
+
+* Install 
+
+https://kind.sigs.k8s.io/docs/user/quick-start/
+
+* Start 
+```
+└─$> kind create cluster --config kind-config.yaml
+Creating cluster "kind" ...
+ ✓ Ensuring node image (kindest/node:v1.18.2) 🖼 
+ ✓ Preparing nodes 📦 📦 📦 📦 📦 📦  
+ ✓ Configuring the external load balancer ⚖️ 
+ ✓ Writing configuration 📜 
+ ✓ Starting control-plane 🕹️ 
+ ✓ Installing CNI 🔌 
+ ✓ Installing StorageClass 💾 
+ ✓ Joining more control-plane nodes 🎮 
+ ✓ Joining worker nodes 🚜 
+Set kubectl context to "kind-kind"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-kind
+
+Thanks for using kind! 😊
+```
+
+* Status
+```
+└─$> kubectl get nodes
+NAME                  STATUS   ROLES    AGE     VERSION
+kind-control-plane    Ready    master   3m41s   v1.18.2
+kind-control-plane2   Ready    master   3m11s   v1.18.2
+kind-control-plane3   Ready    master   2m31s   v1.18.2
+kind-worker           Ready    <none>   2m13s   v1.18.2
+kind-worker2          Ready    <none>   2m13s   v1.18.2
+kind-worker3          Ready    <none>   2m13s   v1.18.2
+```
+
+### Controllers
+
+#### ReplicaSet
+
+https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+
+* Create
+```
+─$> kubectl apply -f ./frontend-replicaset.yaml
+replicaset.apps/frontend created
+
+└─$> kubectl scale replicaset frontend --replicas=3
+replicaset.apps/frontend scaled
+
+─$> kubectl get pods -l app=frontend
+NAME             READY   STATUS    RESTARTS   AGE
+frontend-54ntp   1/1     Running   0          63s
+frontend-9mdpz   1/1     Running   0          63s
+frontend-mxzc6   1/1     Running   0          63s
+
+└─$> kubectl get rs frontend
+NAME       DESIRED   CURRENT   READY   AGE
+frontend   3         3         3       2m16s
+```
+
+* Try delete and get rise again
+```
+└─$> kubectl delete pods -l app=frontend | kubectl get pods -l app=frontend -w
+...
+
+└─$> kubectl get pods -l app=frontend
+NAME             READY   STATUS    RESTARTS   AGE
+frontend-727g8   1/1     Running   0          66s
+frontend-8wt4p   1/1     Running   0          66s
+frontend-h9hbv   1/1     Running   0          66s
+```
+
+* Change image version
+
+We edit in `frontend-replicaset.yaml` docker image version and aplly it but nothing happend.
+
+Check current versions:
+```
+└─$> kubectl get replicaset frontend -o=jsonpath='{.spec.template.spec.containers[0].image}'
+revard/otus-k8s-frontend:v0.0.2
+ 
+└─$> kubectl get pods -l app=frontend -o=jsonpath='{.items[0:3].spec.containers[0].image}'
+revard/otus-k8s-frontend:latest
+```
+
+Now we delete all pods and recreate.
+```
+└─$> kubectl delete pods -l app=frontend | kubectl get pods -l app=frontend -w
+...
+```
+
+Get new image version. 
+```
+└─$> kubectl get replicaset frontend -o=jsonpath='{.spec.template.spec.containers[0].image}'
+revard/otus-k8s-frontend:v0.0.2
+```
+
+!!! It happend because ReplicaSet doesn`t check manifest!!! 
+
+#### Deployment
+
+* Aplly
+```
+└─$> kubectl apply -f ./paymentservice-deployment.yaml
+deployment.apps/paymentservice created
+
+└─$> kubectl get ds
+No resources found in default namespace.
+
+└─$> kubectl get deployment
+NAME             READY   UP-TO-DATE   AVAILABLE   AGE
+paymentservice   1/3     3            1           16s
+
+└─$> kubectl get rs
+NAME                       DESIRED   CURRENT   READY   AGE
+paymentservice-bdf74f647   3         3         1       22s
+
+└─$> kubectl get pods
+NAME                             READY   STATUS    RESTARTS   AGE
+paymentservice-bdf74f647-4svkd   1/1     Running   0          90s
+paymentservice-bdf74f647-htvll   1/1     Running   0          90s
+paymentservice-bdf74f647-qmc64   1/1     Running   0          90s
+```
+
+* Rolling Update (default). Let`s change version in deployment manifest and apply. 
+```
+alf@alf-pad:~/revard_platform/kubernetes-controllers (kubernetes-controllers) 
+└─$> kubectl apply -f paymentservice-deployment.yaml 
+
+└─$> kubectl get replicaset 
+NAME                        DESIRED   CURRENT   READY   AGE
+paymentservice-7d745d469d   3         3         3       2m6s
+paymentservice-bdf74f647    0         0         0       4m33s
+
+└─$> kubectl get replicaset paymentservice-7d745d469d -o=jsonpath='{.spec.template.spec.containers[0].image}'
+revard/otus-k8s-paymentservice:v0.0.2 
+└─$> kubectl get replicaset paymentservice-bdf74f647 -o=jsonpath='{.spec.template.spec.containers[0].image}'
+revard/otus-k8s-paymentservice:v0.0.1
+
+```
+* History
+```
+└─$> kubectl rollout history deployment paymentservice
+deployment.apps/paymentservice 
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+```
+
+* Rollback
+```
+└─$> kubectl rollout undo deployment paymentservice --to-revision=1 | kubectl get rs -l app=paymentservice -w
+...
+
+└─$> kubectl get replicaset 
+NAME                        DESIRED   CURRENT   READY   AGE
+paymentservice-7d745d469d   0         0         0       15m
+paymentservice-bdf74f647    3         3         3       18m
+```
+
+* Deployment strategy
+
+We can use `Max Surge` and `Max Unavailable` parameters. 
+
+https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
+
+Blue-Green example in `paymentservice-deployment-bg.yaml`
+
+Reverse Rolling Update in `paymentservice-deployment-reverse.yaml`
+
+#### Probes
+
+https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+
+* Check status
+```
+└─$> kubectl describe pod | grep Readiness
+    Readiness:      http-get http://:8080/_healthz delay=10s timeout=1s period=10s #success=1 #failure=3
+    Readiness:      http-get http://:8080/_healthz delay=10s timeout=1s period=10s #success=1 #failure=3
+    Readiness:      http-get http://:8080/_healthz delay=10s timeout=1s period=10s #success=1 #failure=3
+```
+
+* Wrong probe example
+```
+─$> kubectl get pod 
+NAME                        READY   STATUS    RESTARTS   AGE
+frontend-7cd948bf65-cb6h7   1/1     Running   0          68m
+frontend-7cd948bf65-t5w4n   1/1     Running   0          68m
+frontend-7cd948bf65-vnsc9   1/1     Running   0          68m
+frontend-7f454bbbf8-crpvw   0/1     Running   0          18s
+
+└─$> kubectl describe pod  frontend-7f454bbbf8-crpvw
+...
+Events:
+  Type     Reason     Age               From                  Message
+  ----     ------     ----              ----                  -------
+...
+  Warning  Unhealthy  4s (x2 over 14s)  kubelet, kind-worker  Readiness probe failed: HTTP probe failed with statuscode: 404  
+```
+
+* Deployment status
+```
+└─$> kubectl rollout status deployment/frontend
+Waiting for deployment "frontend" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "frontend" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "frontend" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "frontend" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "frontend" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "frontend" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "frontend" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "frontend" rollout to finish: 1 old replicas are pending termination...
+deployment "frontend" successfully rolled out
+```
+
+* Probe status examples fot GitLab CI/CD
+
+```
+deploy_job:
+stage: deploy
+script:
+- kubectl apply -f frontend-deployment.yaml
+- kubectl rollout status deployment/frontend --timeout=60s
+```
+```
+rollback_deploy_job:
+stage: rollback
+script:
+- kubectl rollout undo deployment/frontend
+when: on_failure
+```
+
+#### DaemonSet
+
+We try run `node-exporter-daemonset`
+
+```
+└─$> kubectl apply -f node-exporter-daemonset.yaml 
+daemonset.apps/node-exporter created
+
+└─$> kubectl get ds
+NAME            DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
+node-exporter   6         6         0       6            0           kubernetes.io/os=linux   6s
+ 
+└─$> kubectl get pods 
+NAME                        READY   STATUS    RESTARTS   AGE
+frontend-58d98549cb-4zclg   1/1     Running   0          10m
+frontend-58d98549cb-srr46   1/1     Running   0          11m
+frontend-58d98549cb-vsgss   1/1     Running   0          10m
+node-exporter-d2xkf         2/2     Running   0          2m36s
+node-exporter-k8cjd         2/2     Running   0          2m36s
+node-exporter-pwjfb         2/2     Running   0          2m36s
+node-exporter-q84vz         2/2     Running   0          2m36s
+node-exporter-r46xc         2/2     Running   0          2m36s
+node-exporter-r7gth         2/2     Running   0          2m36s
+```
+
+* Test. Forward port and get all ok.
+```
+└─$> kubectl port-forward node-exporter-d2xkf 9100:9100
+Forwarding from 127.0.0.1:9100 -> 9100
+Forwarding from [::1]:9100 -> 9100
+Handling connection for 9100
+
+└─$> curl localhost:9100/metrics
+# HELP go_gc_duration_seconds A summary of the GC invocation durations.
+# TYPE go_gc_duration_seconds summary
+go_gc_duration_seconds{quantile="0"} 0
+go_gc_duration_seconds{quantile="0.25"} 0
+go_gc_duration_seconds{quantile="0.5"} 0
+```
+
+As we can see DaemonSet run on all nodes:
+```
+└─$> kubectl describe nodes  | egrep "Name:|node-exporte"
+Name:               kind-control-plane
+  default                     node-exporter-z47qv                           112m (1%)     270m (3%)   200Mi (1%)       220Mi (1%)     3m3s
+Name:               kind-control-plane2
+  default                     node-exporter-v2qqb                            112m (1%)     270m (3%)   200Mi (1%)       220Mi (1%)     3m3s
+Name:               kind-control-plane3
+  default                     node-exporter-rxw47                            112m (1%)     270m (3%)   200Mi (1%)       220Mi (1%)     3m3s
+Name:               kind-worker
+  default                     node-exporter-fh25z          112m (1%)     270m (3%)   200Mi (1%)       220Mi (1%)     3m3s
+Name:               kind-worker2
+  default                     node-exporter-4m62w          112m (1%)     270m (3%)   200Mi (1%)       220Mi (1%)     3m3s
+Name:               kind-worker3
+  default                     node-exporter-5rcct          112m (1%)     270m (3%)   200Mi (1%)       220Mi (1%)     3m3s
+```
+
+If for some reason daemonset won`t run on master nodes you can setup toleration:
+```
+...
+kind: DaemonSet
+spec:
+  ...
+  template:
+   ...
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+```
+
+
 ## HW-1 Kubernetes Intro
 
 ### Install
@@ -356,3 +669,7 @@ NAME       READY   STATUS    RESTARTS   AGE
 frontend   1/1     Running   0          77s
 web        1/1     Running   0          19h
 ```
+
+#### Links
+
+https://github.com/GoogleCloudPlatform/microservices-demo.git
