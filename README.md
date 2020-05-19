@@ -1,6 +1,10 @@
 # Otus Kubernetes course
 
-## HW-3 K8s security
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=master)
+
+## HW-3 K8s Security
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-security)
 
 ### How to use
 
@@ -54,7 +58,7 @@ bob       1         4m57s
 dave      1         5s
 default   1         15d
 ```
-cd 
+
 #### Create ClusterRoleBinding
 
 ```
@@ -74,6 +78,8 @@ You can find some examples in dir `examples`.
 
 
 ## HW-2 Kubernetes controllers
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-controllers)
 
 ### How to use
 
@@ -387,6 +393,8 @@ spec:
 
 
 ## HW-1 Kubernetes Intro
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-intro)
 
 ### Install
 
