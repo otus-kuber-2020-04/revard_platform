@@ -1,6 +1,85 @@
 # Otus Kubernetes course
 
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=master)
+
+## HW-3 K8s Security
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-security)
+
+### How to use
+
+Clone repo. Start k8s. Run `cd kubernetes-security`. Run commands bellow.
+
+### Get status
+
+#### Cluster info 
+
+```
+└─$> kubectl cluster-info dump | grep authorization-mode
+                            "--authorization-mode=Node,RBAC",
+```
+or
+```
+└─$> kubectl -n kube-system describe pod kube-apiserver-minikube 
+Name:                 kube-apiserver-minikube
+Namespace:            kube-system
+Priority:             2000000000
+...
+```
+
+#### Api resourses https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/
+
+```
+└─$>  kubectl api-resources
+NAME                              SHORTNAMES   APIGROUP                       NAMESPACED   KIND
+bindings                                                                      true         Binding
+componentstatuses                 cs                                          false        ComponentStatus
+configmaps                        cm                                          true         ConfigMap
+endpoints                         ep                                          true         Endpoints
+...
+```
+
+### Palying with SA CR CRB
+
+For example `cd task01`
+
+#### Create ServiceAccount
+
+```
+└─$> kubectl apply -f ./01-sa-bob.yaml 
+serviceaccount/bob created
+
+└─$> kubectl apply -f ./03-sa-dave.yaml 
+serviceaccount/dave created
+
+└─$> kubectl get sa
+NAME      SECRETS   AGE
+bob       1         4m57s
+dave      1         5s
+default   1         15d
+```
+
+#### Create ClusterRoleBinding
+
+```
+└─$> kubectl apply -f ./02-crb-bob.yaml 
+clusterrolebinding.rbac.authorization.k8s.io/bob-cluster-admin created
+
+└─$> kubectl get clusterrolebinding
+NAME                                                   ROLE                                                                               AGE
+bob-cluster-admin                                      ClusterRole/cluster-admin                                                          2m20s
+cluster-admin                                          ClusterRole/cluster-admin                                                          15d
+```
+
+### Exmples
+
+You can find some examples in dir `examples`.
+
+
+
 ## HW-2 Kubernetes controllers
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-controllers)
 
 ### How to use
 
@@ -314,6 +393,8 @@ spec:
 
 
 ## HW-1 Kubernetes Intro
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-intro)
 
 ### Install
 
