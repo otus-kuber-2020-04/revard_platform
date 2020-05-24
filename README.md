@@ -282,7 +282,7 @@ Events:
 
 Now we can see our apps page!
 
-![AppWebPage](./metalbl.png)
+![AppWebPage](./kubernetes-networks/metalbl.png)
 
 
 ##### Useful links
@@ -433,7 +433,7 @@ Events:
 
 Now we can check that IP works  http://172.17.0.2/web/index.html
 
-![AppWebPage](./ingress.png)
+![AppWebPage](./kubernetes-networks/ingress.png)
 
 
 ### Ingress for DashBoard (*)
@@ -473,7 +473,7 @@ Events:
 
 Now we can access dashboard webpage from our host by https://172.17.0.2/dashboard/.
 
-![AppWebPage](./dashboard.png)
+![AppWebPage](./kubernetes-networks/dashboard.png)
 
 
 ### Canary deployment (in progress)
