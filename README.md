@@ -1,3 +1,4 @@
+
 # Otus Kubernetes course
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=master)
@@ -282,7 +283,7 @@ Events:
 
 Now we can see our apps page!
 
-![AppWebPage](./kubernetes-networks/metalbl.png)
+![AppWebPage](./kubernetes-networks/metallb.png)
 
 
 ##### Useful links
