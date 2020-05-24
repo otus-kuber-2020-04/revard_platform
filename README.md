@@ -2,6 +2,485 @@
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=master)
 
+## HW-4 Networks
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-networks)
+
+### How to use
+
+Clone repo. Start minicube. Change dir `cd kubernetes-networks`. Run commands bellow.
+
+### Playing with web app
+
+#### Test deployment with `maxSurge` and `maxUnavailable`
+
+You can use kubespy for monitoring https://github.com/pulumi/kubespy
+
+We change paramters and image version than run `kubectl apply -f web-deploy.yaml`
+
+Check events `kubectl get events --watch | egrep "SuccessfulDelete|SuccessfulCreate|Killing|Started"`
+
+##### maxSurge - 0, maxUnavailable -0 
+
+```
+└─$> kubectl apply -f web-deploy.yaml 
+The Deployment "web" is invalid: spec.strategy.rollingUpdate.maxUnavailable: Invalid value: intstr.IntOrString{Type:0, IntVal:0, StrVal:""}: may not be 0 when `maxSurge` is 0
+```
+
+##### maxSurge - 100, maxUnavailable - 100 
+
+```
+0s          Normal    Killinga             pod/web-68466c4fd7-5c86c    Stopping container web
+0s          Normal    Killing             pod/web-68466c4fd7-tv7tb    Stopping container web
+0s          Normal    Killing             pod/web-68466c4fd7-s8x7v    Stopping container web
+0s          Normal    Started             pod/web-6d7d49c47d-tnqfr    Started container html-gen
+0s          Normal    Started             pod/web-6d7d49c47d-649c8    Started container html-gen
+0s          Normal    Started             pod/web-6d7d49c47d-q5cwf    Started container html-gen
+0s          Normal    Started             pod/web-6d7d49c47d-tnqfr    Started container web
+0s          Normal    Started             pod/web-6d7d49c47d-649c8    Started container web
+0s          Normal    Started             pod/web-6d7d49c47d-q5cwf    Started container web
+```
+
+##### maxSurge - 100, maxUnavailable - 0 
+
+```
+0s          Normal    Started             pod/web-68466c4fd7-hmbtg    Started container html-gen
+0s          Normal    Started             pod/web-68466c4fd7-5d9xz    Started container html-gen
+0s          Normal    Started             pod/web-68466c4fd7-97q8b    Started container html-gen
+0s          Normal    Started             pod/web-68466c4fd7-hmbtg    Started container web
+0s          Normal    Started             pod/web-68466c4fd7-97q8b    Started container web
+0s          Normal    Started             pod/web-68466c4fd7-5d9xz    Started container web
+0s          Normal    Killing             pod/web-6d7d49c47d-tnqfr    Stopping container web
+0s          Normal    Killing             pod/web-6d7d49c47d-649c8    Stopping container web
+0s          Normal    Killing             pod/web-6d7d49c47d-q5cwf    Stopping container web
+```
+
+##### maxSurge - 0, maxUnavailable - 100 
+
+```
+0s          Normal    Killing             pod/web-68466c4fd7-5d9xz    Stopping container web
+0s          Normal    SuccessfulDelete    replicaset/web-68466c4fd7   (combined from similar events): Deleted pod: web-68466c4fd7-5d9xz
+0s          Normal    Killing             pod/web-68466c4fd7-hmbtg    Stopping container web
+0s          Normal    Killing             pod/web-68466c4fd7-97q8b    Stopping container web
+0s          Normal    Started             pod/web-6d7d49c47d-7szcn    Started container html-gen
+0s          Normal    Started             pod/web-6d7d49c47d-7hkvm    Started container html-gen
+0s          Normal    Started             pod/web-6d7d49c47d-pbtqd    Started container html-gen
+0s          Normal    Started             pod/web-6d7d49c47d-7szcn    Started container web
+0s          Normal    Started             pod/web-6d7d49c47d-pbtqd    Started container web
+0s          Normal    Started             pod/web-6d7d49c47d-7hkvm    Started container web
+```
+
+### Service
+
+#### ClisterIP
+
+Run service
+```
+└─$> kubectl apply -f web-svc-cip.yaml 
+service/web-svc-cip created
+
+└─$>  kubectl get services
+NAME          TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)   AGE
+kubernetes    ClusterIP   10.96.0.1       <none>        443/TCP   17d
+web-svc-cip   ClusterIP   10.103.101.59   <none>        80/TCP    9s
+```
+
+Ckeck IP
+```
+└─$> minikube ssh
+docker@minikube:~$ sudo -i
+
+root@minikube:~# curl http://10.103.101.59/index.html  
+<html>
+<head/>
+<body>
+<!-- IMAGE BEGINS HERE -->
+```
+
+This service IP can`t be ping it in iptables https://msazure.club/kubernetes-services-and-iptables/
+```
+root@minikube:~# iptables --list -nv -t nat 
+...
+Chain KUBE-SERVICES (2 references)
+ pkts bytes target     prot opt in     out     source               destination         
+...
+    1    60 KUBE-MARK-MASQ  tcp  --  *      *      !10.244.0.0/16        10.103.101.59        /* default/web-svc-cip: cluster IP */ tcp dpt:80
+    1    60 KUBE-SVC-WKCOG6KH24K26XRJ  tcp  --  *      *       0.0.0.0/0            10.103.101.59        /* default/web-svc-cip: cluster IP */ tcp dpt:80
+...
+```
+
+#### Kube-proxy IPVS mode
+
+https://github.com/kubernetes/kubernetes/blob/master/pkg/proxy/ipvs/README.md
+
+###### Turn on IPVS
+
+1. You can run minicube with extra parameters `minikube start --extra-config=kube-proxy.Mode="ipvs"` but i my case i got error.
+
+2. So we change it manualy in proxy config. Run `kubectl edit -n kube-system configmap/kube-proxy` and cange mode to ipvs. 
+
+Also need add `strictApp` https://github.com/metallb/metallb/issues/153
+
+```
+    ...
+    ipvs:
+      strictARP: true        <----- Add this setting
+    ...  
+    kind: KubeProxyConfiguration
+    metricsBindAddress: 172.17.0.2:10249
+    mode: "ipvs"             <----- Change  to "ipvs"
+    nodePortAddresses: null
+    ...
+```
+
+Restart kube-proxy `kubectl --namespace kube-system delete pod --selector='k8s-app=kube-proxy'`
+
+Clean iptables rules:
+```
+$ minikube ssh
+
+docker@minikube:~$ cat /tmp/iptables.cleanup
+*nat
+-A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE
+COMMIT
+*filter
+COMMIT
+*mangle
+COMMIT
+
+docker@minikube:~$ sudo iptables-restore /tmp/iptables.cleanup
+
+docker@minikube:~$ ip addr show kube-ipvs0
+17: kube-ipvs0: <BROADCAST,NOARP> mtu 1500 qdisc noop state DOWN group default 
+...
+    inet 10.103.101.59/32 brd 10.103.101.59 scope global kube-ipvs0
+       valid_lft forever preferred_lft forever
+
+root@minikube:/home/docker# ipvsadm --list -n
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+...  
+TCP  10.103.101.59:80 rr
+  -> 172.18.0.4:8000              Masq    1      0          0         
+  -> 172.18.0.5:8000              Masq    1      0          0         
+  -> 172.18.0.6:8000              Masq    1      0          0         
+...
+
+root@minikube:/home/docker#  ping -c1 10.103.101.59
+PING 10.103.101.59 (10.103.101.59) 56(84) bytes of data.
+64 bytes from 10.103.101.59: icmp_seq=1 ttl=64 time=0.073 ms
+
+--- 10.103.101.59 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.073/0.073/0.073/0.000 ms
+```
+
+3. Another way to use `minikube dashboard` (namespace kubesystem , Configs and Storage/Config Maps)
+
+Tips: Connect to kube-proxy `$> kubectl -n kube-system exec -it kube-proxy-dl5r5 -- /bin/sh `
+
+### LoadBalancers
+
+#### MetalLB
+
+##### Install
+
+```
+└─$> kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/namespace.yaml
+namespace/metallb-system created
+
+└─$> kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/metallb.yaml
+podsecuritypolicy.policy/controller created
+podsecuritypolicy.policy/speaker created
+serviceaccount/controller created
+serviceaccount/speaker created
+clusterrole.rbac.authorization.k8s.io/metallb-system:controller created
+clusterrole.rbac.authorization.k8s.io/metallb-system:speaker created
+role.rbac.authorization.k8s.io/config-watcher created
+role.rbac.authorization.k8s.io/pod-lister created
+clusterrolebinding.rbac.authorization.k8s.io/metallb-system:controller created
+clusterrolebinding.rbac.authorization.k8s.io/metallb-system:speaker created
+rolebinding.rbac.authorization.k8s.io/config-watcher created
+rolebinding.rbac.authorization.k8s.io/pod-lister created
+daemonset.apps/speaker created
+deployment.apps/controller created
+
+└─$> kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"
+secret/memberlist created
+```
+
+##### Check
+
+```
+└─$>   
+NAME                              READY   STATUS    RESTARTS   AGE
+pod/controller-57f648cb96-cc9g9   1/1     Running   0          59s
+pod/speaker-nm2f5                 1/1     Running   0          59s
+
+NAME                     DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                 AGE
+daemonset.apps/speaker   1         1         1       1            1           beta.kubernetes.io/os=linux   59s
+
+NAME                         READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/controller   1/1     1            1           59s
+
+NAME                                    DESIRED   CURRENT   READY   AGE
+replicaset.apps/controller-57f648cb96   1         1         1       59s
+```
+
+##### Config apply
+
+```
+└─$> kubectl apply -f metallb-config.yaml 
+configmap/config created
+```
+
+##### LoadBalancer 
+
+```└─$> kubectl apply -f web-svc-lb.yaml
+service/web-svc-lb created
+
+└─$> kubectl get pods -n metallb-system
+NAME                          READY   STATUS    RESTARTS   AGE
+controller-57f648cb96-cc9g9   1/1     Running   0          9m2s
+speaker-nm2f5                 1/1     Running   0          9m2s
+
+└─$> kubectl --namespace metallb-system logs controller-57f648cb96-cc9g9
+...
+{"caller":"service.go:114","event":"ipAllocated","ip":"172.17.255.1","msg":"IP address assigned by controller","service":"default/web-svc-lb","ts":"2020-05-24T10:07:46.106293825Z"}
+...
+
+└─$>   kubectl describe svc web-svc-lb
+Name:                     web-svc-lb
+Namespace:                default
+Labels:                   <none>
+Annotations:              Selector:  app=web
+Type:                     LoadBalancer
+IP:                       10.101.76.16
+LoadBalancer Ingress:     172.17.255.1
+Port:                     <unset>  80/TCP
+TargetPort:               8000/TCP
+NodePort:                 <unset>  31556/TCP
+Endpoints:                172.18.0.2:8000,172.18.0.3:8000,172.18.0.7:8000
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:
+  Type    Reason        Age    From                Message
+  ----    ------        ----   ----                -------
+  Normal  IPAllocated   5m16s  metallb-controller  Assigned IP "172.17.255.1"
+  Normal  nodeAssigned  5m16s  metallb-speaker     announcing from node "minikube"
+```
+
+##### Add route to IP and check
+
+```
+└─$> minikube ip
+172.17.0.2
+
+└─$> sudo ip route add 172.17.255.0/24 via 172.17.0.2 proto static metric 50
+```
+
+Now we can see our apps page!
+
+![AppWebPage](./metalbl.png)
+
+
+##### Useful links
+
+https://kubernetes.io/blog/2018/07/09/ipvs-based-in-cluster-load-balancing-deep-dive/
+
+http://www.linuxvirtualserver.org/docs/scheduling.html
+
+https://github.com/kubernetes/kubernetes/blob/1cb3b5807ec37490b4582f22d991c043cc468195/pkg/proxy/apis/config/types.go#L185
+
+
+#### LoadBalancer for CoreDns (*) https://metallb.universe.tf/usage/
+
+```
+└─$> kubectl apply --validate -f ./coredns-svc-lb.yaml 
+service/coredns-svc-tcp-lb unchanged
+service/coredns-svc-udp-lb unchanged
+
+└─$> kubectl get service -n kube-system
+NAME                 TYPE           CLUSTER-IP       EXTERNAL-IP    PORT(S)                  AGE
+coredns-svc-tcp-lb   LoadBalancer   10.97.129.43     172.17.255.2   53:31785/TCP             6m37s
+coredns-svc-udp-lb   LoadBalancer   10.102.211.127   172.17.255.2   53:30594/UDP             6m37s
+kube-dns             ClusterIP      10.96.0.10       <none>         53/UDP,53/TCP,9153/TCP   20d
+
+└─$> kubectl describe svc coredns-svc-tcp-lb -n kube-system
+Name:                     coredns-svc-tcp-lb
+Namespace:                kube-system
+Labels:                   <none>
+Annotations:              metallb.universe.tf/allow-shared-ip: coredns
+Selector:                 k8s-app=kube-dns
+Type:                     LoadBalancer
+IP:                       10.97.129.43
+IP:                       172.17.255.2
+LoadBalancer Ingress:     172.17.255.2
+Port:                     <unset>  53/TCP
+TargetPort:               53/TCP
+NodePort:                 <unset>  31785/TCP
+Endpoints:                172.18.0.6:53,172.18.0.8:53
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:
+  Type    Reason        Age    From                Message
+  ----    ------        ----   ----                -------
+  Normal  IPAllocated   6m47s  metallb-controller  Assigned IP "172.17.255.2"
+  Normal  nodeAssigned  2m43s  metallb-speaker     announcing from node "minikube"
+
+# Test DNS
+└─$> nslookup 172.17.255.2 172.17.255.2
+2.255.17.172.in-addr.arpa	name = coredns-svc-udp-lb.kube-system.svc.cluster.local.
+
+# It works!
+```
+
+### Ingress 
+
+#### Install
+
+```
+└─$> kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/static/provider/baremetal/deploy.yaml
+namespace/ingress-nginx created
+serviceaccount/ingress-nginx created
+configmap/ingress-nginx-controller created
+clusterrole.rbac.authorization.k8s.io/ingress-nginx created
+clusterrolebinding.rbac.authorization.k8s.io/ingress-nginx created
+role.rbac.authorization.k8s.io/ingress-nginx created
+rolebinding.rbac.authorization.k8s.io/ingress-nginx created
+service/ingress-nginx-controller-admission created
+service/ingress-nginx-controller created
+deployment.apps/ingress-nginx-controller created
+validatingwebhookconfiguration.admissionregistration.k8s.io/ingress-nginx-admission created
+clusterrole.rbac.authorization.k8s.io/ingress-nginx-admission created
+clusterrolebinding.rbac.authorization.k8s.io/ingress-nginx-admission created
+job.batch/ingress-nginx-admission-create created
+job.batch/ingress-nginx-admission-patch created
+role.rbac.authorization.k8s.io/ingress-nginx-admission created
+rolebinding.rbac.authorization.k8s.io/ingress-nginx-admission created
+serviceaccount/ingress-nginx-admission created
+```
+
+Here some instruction for NodePort service https://kubernetes.github.io/ingress-nginx/deploy/#bare-metal
+
+Can simple run `minikube addons enable ingress`
+
+But we will create Ingress with LoadBalancer:
+
+```
+└─$> kubectl apply -f ./nginx-lb.yaml 
+service/ingress-nginx created
+
+└─$> kubectl get service -n ingress-nginx
+NAME                                 TYPE           CLUSTER-IP      EXTERNAL-IP    PORT(S)                      AGE
+ingress-nginx                        LoadBalancer   10.110.13.33    172.17.255.3   80:31180/TCP,443:32175/TCP   3m9s
+ingress-nginx-controller             NodePort       10.96.210.22    <none>         80:31985/TCP,443:31260/TCP   8m56s
+ingress-nginx-controller-admission   ClusterIP      10.110.168.66   <none>         443/TCP                      8m56s
+
+# test and see nginx works
+└─$> curl 172.17.255.3
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>nginx/1.17.10</center>
+</body>
+</html>
+```
+
+#### Headless service
+
+We don`t need cluster IP so create new headless service.
+
+```
+└─$> kubectl apply -f ./web-svc-headless.yaml 
+service/web-svc created
+
+└─$> kubectl get service
+NAME          TYPE           CLUSTER-IP      EXTERNAL-IP    PORT(S)        AGE
+kubernetes    ClusterIP      10.96.0.1       <none>         443/TCP        21d
+web-svc       ClusterIP      None            <none>         80/TCP         2s    <---- no IP
+web-svc-cip   ClusterIP      10.103.101.59   <none>         80/TCP         3d2h
+web-svc-lb    LoadBalancer   10.101.76.16    172.17.255.1   80:31556/TCP   6h31m
+```
+ 
+#### Ingress rules
+
+```
+└─$> kubectl apply -f ./web-ingress.yaml
+ingress.networking.k8s.io/web created
+
+└─$> kubectl describe ingress/web
+Name:             web
+Namespace:        default
+Address:          172.17.0.2
+Default backend:  default-http-backend:80 (<error: endpoints "default-http-backend" not found>)
+Rules:
+  Host        Path  Backends
+  ----        ----  --------
+  *           
+              /web   web-svc:8000 (172.18.0.2:8000,172.18.0.3:8000,172.18.0.7:8000)
+Annotations:  nginx.ingress.kubernetes.io/rewrite-target: /
+Events:
+  Type    Reason  Age   From                      Message
+  ----    ------  ----  ----                      -------
+  Normal  CREATE  36s   nginx-ingress-controller  Ingress default/web
+  Normal  CREATE  36s   nginx-ingress-controller  Ingress default/web
+  Normal  UPDATE  24s   nginx-ingress-controller  Ingress default/web
+  Normal  UPDATE  24s   nginx-ingress-controller  Ingress default/web
+```
+
+Now we can check that IP works  http://172.17.0.2/web/index.html
+
+![AppWebPage](./ingress.png)
+
+
+### Ingress for DashBoard (*)
+
+Install
+
+```
+└─$> kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.1/aio/deploy/recommended.yaml
+
+└─$> minikube addons enable ingress
+🌟  The 'ingress' addon is enabled
+
+└─$> kubectl apply -f ./dashboard/ingress-dashboard.yaml 
+ingress.networking.k8s.io/dashboard-ingress created
+
+└─$> kubectl -n kubernetes-dashboard describe ingress dashboard-ingress
+Name:             dashboard-ingress
+Namespace:        kubernetes-dashboard
+Address:          172.17.0.2
+Default backend:  default-http-backend:80 (<error: endpoints "default-http-backend" not found>)
+Rules:
+  Host        Path  Backends
+  ----        ----  --------
+  *           
+              /dashboard/(.*)   kubernetes-dashboard:443 (172.18.0.4:8443)
+Annotations:  kubernetes.io/ingress.class: nginx
+              nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+              nginx.ingress.kubernetes.io/rewrite-target: /$1
+              nginx.ingress.kubernetes.io/secure-backends: true
+Events:
+  Type    Reason  Age                    From                      Message
+  ----    ------  ----                   ----                      -------
+  Normal  CREATE  7m33s                  nginx-ingress-controller  Ingress kubernetes-dashboard/dashboard-ingress
+  Normal  UPDATE  6m40s (x2 over 6m44s)  nginx-ingress-controller  Ingress kubernetes-dashboard/dashboard-ingress
+
+```
+
+Now we can access dashboard webpage from our host by https://172.17.0.2/dashboard/.
+
+![AppWebPage](./dashboard.png)
+
+
+### Canary deployment (in progress)
+
+https://github.com/kubernetes/ingress-nginx/blob/master/docs/user-guide/nginx-configuration/annotations.md#canary
+
+
 ## HW-3 K8s Security
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-security)
