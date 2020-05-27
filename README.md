@@ -3,6 +3,85 @@
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=master)
 
+## HW-5 Volumes
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-volumes)
+
+### How to use
+
+Clone repo. Change dir `cd kubernetes-volumes`. Run commands bellow.
+
+Run kind
+```
+kind create cluster
+kind export kubeconfig
+
+```
+### Minio 
+
+https://min.io/
+
+#### Install
+```
+└─$> kubectl apply -f https://raw.githubusercontent.com/express42/otus-platform-snippets/master/Module-02/Kuberenetes-volumes/minio-statefulset.yaml
+statefulset.apps/minio created
+
+└─$> kubectl apply -f https://raw.githubusercontent.com/express42/otus-platform-snippets/master/Module-02/Kuberenetes-volumes/minio-headless-service.yaml
+service/minio created
+```
+
+#### Check 
+
+Can use https://github.com/minio/mc
+
+or
+```
+└─$> kubectl get statefulsets
+NAME    READY   AGE
+minio   1/1     37m
+
+└─$> kubectl get pods
+NAME      READY   STATUS    RESTARTS   AGE
+minio-0   1/1     Running   0          37m
+
+└─$> kubectl get pvc
+NAME           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+data-minio-0   Bound    pvc-b6cecf15-075b-4e44-85ed-d4d35c7520d4   10Gi       RWO            standard       38m
+
+└─$> kubectl get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                  STORAGECLASS   REASON   AGE
+pvc-b6cecf15-075b-4e44-85ed-d4d35c7520d4   10Gi       RWO            Delete           Bound    default/data-minio-0   standard                38m
+
+# detailed info
+kubectl describe <resource> <resource_name>
+```
+
+### Secret
+
+https://kubernetes.io/docs/concepts/configuration/secret/
+
+
+Generate
+```
+└─$> echo -n 'minio' | base64
+bWluaW8=
+
+└─$> echo -n 'minio123' | base64
+bWluaW8xMjM=
+```
+
+Aplly
+```
+─$> kubectl apply -f ./minio-secret.yaml
+secret/minio-secret created
+
+└─$> kubectl get secrets
+NAME                  TYPE                                  DATA   AGE
+default-token-4n8gw   kubernetes.io/service-account-token   3      6h46m
+minio-secret          Opaque                                2      3s
+```
+
+
 ## HW-4 Networks
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-networks)
