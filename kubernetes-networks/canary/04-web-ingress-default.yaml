@@ -1,0 +1,17 @@
+￼
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: web
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: canary
+    http:
+      paths:
+      - path: /web
+        backend:
+          serviceName: web-svc
+          servicePort: 8000
