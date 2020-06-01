@@ -1,0 +1,13 @@
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: hipstershop-frontend
+spec:
+  rules:
+    - host: shop.35.188.48.91.nip.io
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: frontend
+              servicePort: {{ .Values.service.port }}
