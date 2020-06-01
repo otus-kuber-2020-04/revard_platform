@@ -311,7 +311,7 @@ TEST SUITE: None
 
 ##### Check
 
-* 1. Using firewall rule for PortNode
+1. Using firewall rule for PortNode
 ```
 └─$> gcloud compute firewall-rules create test-node-port --allow tcp:$(kubectl get svc/frontend -n hipster-shop -o jsonpath={.spec.ports[0].nodePort})
 Creating firewall...⠹Created [https://www.googleapis.com/compute/v1/projects/otus-kuber-278614/global/firewalls/test-node-port].                                                                    
@@ -331,8 +331,7 @@ test-node-port  default  INGRESS    1000      tcp:32145        False
 
 ```
 
-* 2. Using ingress for example
-
+2. Using ingress for example
 ```
 apiVersion: networking.k8s.io/v1beta1
 kind: Ingress
