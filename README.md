@@ -43,6 +43,32 @@ kubeconfig entry generated for cluster-1.
 
 ### Helm
 
+#### Tips
+
+Create release:
+```
+$ helm install <chart_name> --name=<release_name> --namespace=<namespace>
+$ kubectl get secrets -n <namespace> | grep <release_name>
+sh.helm.release.v1.<release_name>.v1 helm.sh/release.v1 1 115m
+```
+
+Update release:
+```
+$ helm upgrade <release_name> <chart_name> --namespace=<namespace>
+$ kubectl get secrets -n <namespace> | grep <release_name>
+sh.helm.release.v1.<release_name>.v1 helm.sh/release.v1 1 115m
+sh.helm.release.v1.<release_name>.v2 helm.sh/release.v1 1 56m
+```
+
+Create or update release:
+```
+$ helm upgrade --install <release_name> <chart_name> --namespace=<namespace>
+$ kubectl get secrets -n <namespace> | grep <release_name>
+sh.helm.release.v1.<release_name>.v1 helm.sh/release.v1 1 115m
+sh.helm.release.v1.<release_name>.v2 helm.sh/release.v1 1 56m
+sh.helm.release.v1.<release_name>.v3 helm.sh/release.v1 1 5s
+```
+
 #### Install
 
 https://github.com/helm/helm#install
