@@ -3,6 +3,259 @@
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=master)
 
+## HW-7 Operators
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-operators)
+
+### How to use
+
+Clone repo. Change dir `cd kubernetes-operators`. Start minikube. Run commands bellow.
+
+### Palying with CRD
+
+#### Create
+
+```
+└─$> kubectl apply -f deploy/crd.yml
+customresourcedefinition.apiextensions.k8s.io/mysqls.otus.homework created
+
+└─$> kubectl apply -f deploy/cr.yml
+mysql.otus.homework/mysql-instance created
+```
+
+#### Check
+
+```
+└─$> kubectl get crd
+NAME                   CREATED AT
+mysqls.otus.homework   2020-06-03T08:20:18Z
+
+└─$> kubectl get mysqls.otus.homework
+NAME             AGE
+mysql-instance   16s
+
+└─$> kubectl describe mysqls.otus.homework mysql-instance
+Name:         mysql-instance
+Namespace:    default
+Labels:       <none>
+Annotations:  API Version:  otus.homework/v1
+Kind:         MySQL
+Metadata:
+  Creation Timestamp:  2020-06-03T08:20:28Z
+  Generation:          1
+...
+```
+
+### MySQL controller
+
+#### Run controller
+
+```
+└─$> kopf run mysql-operator.py
+[2020-06-03 21:35:37,142] kopf.reactor.activit [INFO    ] Initial authentication has been initiated.
+[2020-06-03 21:35:37,158] kopf.activities.auth [INFO    ] Handler 'login_via_pykube' succeeded.
+[2020-06-03 21:35:37,182] kopf.activities.auth [INFO    ] Handler 'login_via_client' succeeded.
+[2020-06-03 21:35:37,182] kopf.reactor.activit [INFO    ] Initial authentication has finished.
+[2020-06-03 21:35:37,200] kopf.engines.peering [WARNING ] Default peering object not found, falling back to the standalone mode.
+
+# After kubectl apply -f deploy/cr.yml
+
+mysql-operator.py:28: YAMLLoadWarning: calling yaml.load() without Loader=... is deprecated, as the default Loader is unsafe. Please read https://msg.pyyaml.org/load for full details.
+  json_manifest = yaml.load(yaml_manifest)
+{'api_version': 'v1',
+ 'kind': 'PersistentVolume',
+...
+ 'status': {'message': None, 'phase': 'Pending', 'reason': None}}
+[2020-06-03 22:20:29,447] kopf.objects         [INFO    ] [default/mysql-instance] Handler 'mysql_on_create' succeeded.
+[2020-06-03 22:20:29,448] kopf.objects         [INFO    ] [default/mysql-instance] All handlers succeeded for creation.
+start deletion
+job with backup-mysql-instance-job  found,wait untill end
+job with backup-mysql-instance-job  found,wait untill end
+job with backup-mysql-instance-job  success
+
+# After kubectl delete mysqls.otus.homework mysql-instance
+
+[2020-06-03 22:24:54,522] kopf.objects         [INFO    ] [default/mysql-instance] Handler 'delete_object_make_backup' succeeded.
+[2020-06-03 22:24:54,523] kopf.objects         [INFO    ] [default/mysql-instance] All handlers succeeded for deletion.
+```
+
+#### Install
+
+!Tip!
+
+If you will get bug with `pvc pending` you need to disable addon:
+```
+└─$> minikube addons disable default-storageclass
+🌑  "The 'default-storageclass' addon is disabled
+```
+
+Now create
+```
+└─$> kubectl apply -f deploy/cr.yml
+mysql.otus.homework/mysql-instance created
+
+└─$> kubectl get pv
+NAME                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                               STORAGECLASS   REASON   AGE
+backup-mysql-instance-pv   1Gi        RWO            Retain           Bound    default/backup-mysql-instance-pvc                           11s
+mysql-instance-pv          1Gi        RWO            Retain           Bound    default/mysql-instance-pvc                                  11s
+alf@alf-pad:~/revard_platform/kubernetes-operators (kubernetes-operators) 
+└─$> kubectl get pvc
+NAME                        STATUS   VOLUME                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+backup-mysql-instance-pvc   Bound    backup-mysql-instance-pv   1Gi        RWO                           14s
+mysql-instance-pvc          Bound    mysql-instance-pv          1Gi        RWO                           14s
+```
+
+#### Test MySQL DB
+
+```
+└─$> export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="
+> {.items[*].metadata.name}")
+
+└─$> kubectl exec -it $MYSQLPOD -- mysql -u root -potuspassword -e "CREATE TABLE test (
+> id smallint unsigned not null auto_increment, name varchar(20) not null, constraint
+> pk_example primary key (id) );" otus-database
+mysql: [Warning] Using a password on the command line interface can be insecure.
+
+└─$> kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "INSERT INTO test ( id, name
+> ) VALUES ( null, 'some data' );" otus-database
+mysql: [Warning] Using a password on the command line interface can be insecure.
+ 
+└─$> kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "INSERT INTO test ( id, name )
+> VALUES ( null, 'some data-2' );" otus-database
+mysql: [Warning] Using a password on the command line interface can be insecure.
+
+└─$> kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
+mysql: [Warning] Using a password on the command line interface can be insecure.
++----+-------------+
+| id | name        |
++----+-------------+
+|  1 | some data   |
+|  2 | some data-2 |
++----+-------------+
+```
+
+Try delete main DB
+```
+└─$> kubectl delete mysqls.otus.homework mysql-instance
+mysql.otus.homework "mysql-instance" deleted
+
+└─$> kubectl get pv
+NAME                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                               STORAGECLASS   REASON   AGE
+backup-mysql-instance-pv   1Gi        RWO            Retain           Bound    default/backup-mysql-instance-pvc                           5m42s
+
+└─$> kubectl get jobs.batch
+NAME                         COMPLETIONS   DURATION   AGE
+backup-mysql-instance-job    1/1           2s         119s
+restore-mysql-instance-job   1/1           6m22s      6m22s
+```
+
+Recreate main DB and get all back
+```
+└─$> kubectl apply -f deploy/cr.yml 
+mysql.otus.homework/mysql-instance created
+
+└─$> export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="
+> {.items[*].metadata.name}")
+
+└─$> kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
+mysql: [Warning] Using a password on the command line interface can be insecure.
++----+-------------+
+| id | name        |
++----+-------------+
+|  1 | some data   |
+|  2 | some data-2 |
++----+-------------+
+```
+
+#### Delete all
+
+```
+kubectl delete mysqls.otus.homework mysql-instance
+kubectl delete deployments.apps mysql-instance
+kubectl delete pvc mysql-instance-pvc
+kubectl delete pv mysql-instance-pv
+kubectl delete svc mysql-instance
+```
+
+#### Docker image
+
+Build image
+```
+cd build
+docker build --tag=revard/mysql-operator:v0.1 .
+dpclet login
+docker push revard/mysql-operator:v0.1
+```
+
+Test
+```
+└─$> kubectl apply -f ./deploy/service-account.yml
+serviceaccount/mysql-operator created
+
+└─$> kubectl apply -f ./deploy/role.yml 
+clusterrole.rbac.authorization.k8s.io/mysql-operator created
+
+└─$> kubectl apply -f ./deploy/role-binding.yml
+clusterrolebinding.rbac.authorization.k8s.io/workshop-operator created
+
+└─$> kubectl apply -f ./deploy/deploy-operator.yml 
+deployment.apps/mysql-operator created
+
+└─$> kubectl get pvc
+NAME                        STATUS   VOLUME                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+backup-mysql-instance-pvc   Bound    backup-mysql-instance-pv   1Gi        RWO                           34m
+mysql-instance-pvc          Bound    mysql-instance-pv          1Gi        RWO                           27m
+
+└─$> export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="
+> {.items[*].metadata.name}")
+
+└─$> kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
+mysql: [Warning] Using a password on the command line interface can be insecure.
++----+-------------+
+| id | name        |
++----+-------------+
+|  1 | some data   |
+|  2 | some data-2 |
++----+-------------+
+```
+
+Delete DB
+```
+└─$> kubectl delete mysqls.otus.homework mysql-instance
+mysql.otus.homework "mysql-instance" deleted
+
+└─$> kubectl get pv
+NAME                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS        CLAIM                               STORAGECLASS   REASON   AGE
+backup-mysql-instance-pv   1Gi        RWO            Retain           Bound         default/backup-mysql-instance-pvc                           36m
+
+└─$> kubectl get jobs.batch
+NAME                         COMPLETIONS   DURATION   AGE
+backup-mysql-instance-job    1/1           2s         2m27s
+```
+
+Restore DB
+```
+└─$> kubectl apply -f deploy/cr.yml 
+mysql.otus.homework/mysql-instance created
+
+└─$> export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="
+> {.items[*].metadata.name}")
+
+└─$> kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
+mysql: [Warning] Using a password on the command line interface can be insecure.
++----+-------------+
+| id | name        |
++----+-------------+
+|  1 | some data   |
+|  2 | some data-2 |
++----+-------------+
+
+└─$> kubectl get jobs.batch
+NAME                         COMPLETIONS   DURATION   AGE
+backup-mysql-instance-job    1/1           2s         3m42s
+restore-mysql-instance-job   1/1           49s        113s
+```
+
 ## HW-6 Templates
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-templating)
@@ -166,7 +419,7 @@ cert-manager has been deployed successfully!
 ...
 ```
 
-##### Issuer
+#####   
 
 For correct work need to create issuer 
 
