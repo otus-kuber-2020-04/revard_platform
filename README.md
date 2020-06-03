@@ -3,6 +3,487 @@
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=master)
 
+## HW-6 Templates
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-templating)
+
+### How to use
+
+Clone repo. Change dir `cd kubernetes-templates`. Run commands bellow.
+
+### GCP Kubernetes
+
+https://cloud.google.com/kubernetes-engine/
+
+https://cloud.google.com/compute/docs/instances/interacting-with-serial-console
+
+Create new cluster on gCP.
+
+#### Install gcloud
+
+https://cloud.google.com/sdk/docs/quickstart-linux
+
+Connect by using command from button `connect` on cluster page.
+```
+└─$> gcloud container clusters get-credentials cluster-1 --zone europe-west1-b --project otus-kuber-*****
+Fetching cluster endpoint and auth data.
+kubeconfig entry generated for cluster-1.
+```
+
+#### Check
+
+```
+└─$>  kubectl config current-context
+gke_otus-kuber-*****_europe-west1-b_cluster-1
+
+└─$> gcloud beta container clusters get-credentials cluster-1 
+Fetching cluster endpoint and auth data.
+kubeconfig entry generated for cluster-1.
+```
+
+### Helm
+
+#### Tips
+
+Create release:
+```
+$ helm install <chart_name> --name=<release_name> --namespace=<namespace>
+$ kubectl get secrets -n <namespace> | grep <release_name>
+sh.helm.release.v1.<release_name>.v1 helm.sh/release.v1 1 115m
+```
+
+Update release:
+```
+$ helm upgrade <release_name> <chart_name> --namespace=<namespace>
+$ kubectl get secrets -n <namespace> | grep <release_name>
+sh.helm.release.v1.<release_name>.v1 helm.sh/release.v1 1 115m
+sh.helm.release.v1.<release_name>.v2 helm.sh/release.v1 1 56m
+```
+
+Create or update release:
+```
+$ helm upgrade --install <release_name> <chart_name> --namespace=<namespace>
+$ kubectl get secrets -n <namespace> | grep <release_name>
+sh.helm.release.v1.<release_name>.v1 helm.sh/release.v1 1 115m
+sh.helm.release.v1.<release_name>.v2 helm.sh/release.v1 1 56m
+sh.helm.release.v1.<release_name>.v3 helm.sh/release.v1 1 5s
+```
+
+#### Install
+
+https://github.com/helm/helm#install
+
+#### Add google repo
+
+```
+└─$> helm repo add stable https://kubernetes-charts.storage.googleapis.com
+"stable" has been added to your repositories
+
+└─$> helm repo list
+NAME    	URL                                             
+stable  	https://kubernetes-charts.storage.googleapis.com
+
+```
+
+### Helm charts
+
+https://github.com/helm/charts/tree/master/stable/nginx-ingress
+
+https://github.com/jetstack/cert-manager/tree/master/deploy/charts/cert-manager
+
+https://github.com/helm/charts/tree/master/stable/chartmuseum
+
+https://github.com/goharbor/harbor-helm
+
+#### Ingress
+
+* Create namespaces and releases
+
+```
+└─$> kubectl create ns nginx-ingress
+namespace/nginx-ingress created
+
+└─$> helm upgrade --install nginx-ingress stable/nginx-ingress --wait \
+ --namespace=nginx-ingress \
+ --version=1.11.1
+Release "nginx-ingress" does not exist. Installing it now.
+NAME: nginx-ingress
+LAST DEPLOYED: Fri May 29 15:07:12 2020
+NAMESPACE: nginx-ingress
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+The nginx-ingress controller has been installed.
+It may take a few minutes for the LoadBalancer IP to be available.
+You can watch the status by running 'kubectl --namespace nginx-ingress get services -o wide -w nginx-ingress-controller'
+...
+```
+
+
+#### Cert-manager
+
+Add repo
+```
+└─$> helm repo add jetstack https://charts.jetstack.io
+"jetstack" has been added to your repositories
+```
+
+Create CRD https://github.com/jetstack/cert-manager/tree/master/deploy/charts/cert-manager
+```
+└─$> kubectl apply -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.9/deploy/manifests/00-crds.yaml
+customresourcedefinition.apiextensions.k8s.io/certificates.certmanager.k8s.io created
+customresourcedefinition.apiextensions.k8s.io/certificaterequests.certmanager.k8s.io created
+customresourcedefinition.apiextensions.k8s.io/challenges.certmanager.k8s.io created
+customresourcedefinition.apiextensions.k8s.io/clusterissuers.certmanager.k8s.io created
+customresourcedefinition.apiextensions.k8s.io/issuers.certmanager.k8s.io created
+customresourcedefinition.apiextensions.k8s.io/orders.certmanager.k8s.io created
+```
+
+Setup
+```
+└─$> kubectl create ns cert-manager
+namespace/cert-manager created
+
+└─$> kubectl label namespace cert-manager certmanager.k8s.io/disable-validation="true"
+namespace/cert-manager labeled
+```
+
+Install
+```
+└─$> helm upgrade --install cert-manager jetstack/cert-manager --wait \
+ --namespace=cert-manager \
+ --version=0.9.0
+Release "cert-manager" does not exist. Installing it now.
+NAME: cert-manager
+LAST DEPLOYED: Fri May 29 15:23:01 2020
+NAMESPACE: cert-manager
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+cert-manager has been deployed successfully!
+...
+```
+
+##### Issuer
+
+For correct work need to create issuer 
+
+https://cert-manager.io/docs/installation/kubernetes/#configuring-your-first-issuer
+
+https://docs.cert-manager.io/en/release-0.11/tasks/issuers/index.html
+
+```
+└─$> kubectl apply -f ./cert-manager/issuer-letsencrypt.yaml 
+clusterissuer.certmanager.k8s.io/issuer-letsencrypt created
+
+└─$> kubectl describe ClusterIssuer 
+Name:         issuer-letsencrypt
+Namespace:    
+Labels:       <none>
+Annotations:  API Version:  certmanager.k8s.io/v1alpha1
+Kind:         ClusterIssuer
+Metadata:
+  Creation Timestamp:  2020-05-29T12:44:00Z
+  Generation:          2
+  Resource Version:    15429
+  Self Link:           /apis/certmanager.k8s.io/v1alpha1/clusterissuers/issuer-letsencrypt
+  UID:                 11ef9bd0-a1aa-11ea-bde0-42010a840235
+...
+```
+
+#### Chartmuseum
+
+https://github.com/helm/charts/tree/master/stable/chartmuseum
+
+https://github.com/helm/charts/blob/master/stable/chartmuseum/values.yaml
+
+##### Install
+```
+└─$> kubectl create ns chartmuseum
+namespace/chartmuseum created
+
+└─$> helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.3.2 -f chartmuseum/values.yaml
+Release "chartmuseum" does not exist. Installing it now.
+NAME: chartmuseum
+LAST DEPLOYED: Sat May 30 09:36:28 2020
+NAMESPACE: chartmuseum
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+** Please be patient while the chart is being deployed **
+
+Get the ChartMuseum URL by running:
+
+  export POD_NAME=$(kubectl get pods --namespace chartmuseum -l "app=chartmuseum" -l "release=chartmuseum" -o jsonpath="{.items[0].metadata.name}")
+  echo http://127.0.0.1:8080/
+  kubectl port-forward $POD_NAME 8080:8080 --namespace chartmuseum
+```
+
+##### Check
+```
+└─$> helm ls -n chartmuseum
+NAME       	NAMESPACE  	REVISION	UPDATED                                	STATUS  	CHART            	APP VERSION
+chartmuseum	chartmuseum	1       	2020-05-30 16:37:48.617500332 +0300 MSK	deployed	chartmuseum-2.3.2	0.8.2  
+
+└─$> curl https://$(kubectl get ingress chartmuseum-chartmuseum -n chartmuseum -o jsonpath={.spec.rules[0].host})
+...
+<title>Welcome to ChartMuseum!</title>
+...
+```
+
+##### How to use Chartmuseum (*)
+
+```
+└─$> helm repo add chartmuseum https://chartmuseum.104.155.101.164.nip.io/
+"chartmuseum" has been added to your repositories
+
+└─$> helm repo list
+NAME       	URL                                             
+stable     	https://kubernetes-charts.storage.googleapis.com
+jetstack   	https://charts.jetstack.io                      
+chartmuseum	https://chartmuseum.104.155.101.164.nip.io/     
+
+
+└─$> helm repo update
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "chartmuseum" chart repository
+...Successfully got an update from the "stable" chart repository
+...Successfully got an update from the "jetstack" chart repository
+Update Complete. ⎈ Happy Helming!⎈ 
+
+└─$> helm pull stable/chartmuseum --version=2.3.2
+
+└─$> curl -L --data-binary "@chartmuseum-2.3.2.tgz" https://chartmuseum.104.155.101.164.nip.io/api/charts
+{"saved":true}
+```
+
+![ChartmuseumPage](./kubernetes-templating/chartmuseum.png)
+
+### Harbor
+
+https://github.com/goharbor/harbor-helm
+
+#### Install
+
+  ```
+└─$> helm repo add harbor https://helm.goharbor.io
+"harbor" has been added to your repositories
+
+└─$> kubectl create ns harbor
+namespace/harbor created
+
+└─$> helm upgrade --install harbor harbor/harbor --wait --namespace=harbor --version=1.1.2 -f harbor/values.yaml
+Release "harbor" does not exist. Installing it now.
+NAME: harbor
+LAST DEPLOYED: Sun May 31 10:11:44 2020
+NAMESPACE: harbor
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+Please wait for several minutes for Harbor deployment to complete.
+Then you should be able to visit the Harbor portal at https://harbor.104.155.101.164.nip.io. 
+For more details, please visit https://github.com/goharbor/harbor.
+
+└─$> kubectl get secrets -n harbor -l owner=helm
+NAME                           TYPE                 DATA   AGE
+sh.helm.release.v1.harbor.v1   helm.sh/release.v1   1      15m
+```
+
+#### Status
+
+```
+└─$> helm ls -n harbor
+NAME    NAMESPACE       REVISION        UPDATED                                 STATUS          CHART           APP VERSION
+harbor  harbor          1               2020-05-31 10:11:44.202733384 +0300 MSK deployed        harbor-1.1.2    1.8.2     
+
+└─$> curl https://$(kubectl get ingress harbor-harbor-ingress -n harbor -o jsonpath={.spec.rules[0].host})
+...
+    <title>Harbor</title>
+...
+```
+
+![HarborPage](./kubernetes-templating/harbor.png)
+
+### Helm chart
+
+We will use https://github.com/GoogleCloudPlatform/microservices-demo
+
+#### Install 
+
+Init structure
+```
+└─$> helm create hipster-shop
+Creating hipster-shop
+```
+
+Install
+```
+└─$> kubectl create ns hipster-shop
+namespace/hipster-shop created
+
+└─$> helm upgrade --install hipster-shop ./hipster-shop --namespace hipster-shop
+Release "hipster-shop" does not exist. Installing it now.
+NAME: hipster-shop
+LAST DEPLOYED: Sun May 31 10:46:23 2020
+NAMESPACE: hipster-shop
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+```
+
+##### Check
+
+1. Using firewall rule for PortNode
+```
+└─$> gcloud compute firewall-rules create test-node-port --allow tcp:$(kubectl get svc/frontend -n hipster-shop -o jsonpath={.spec.ports[0].nodePort})
+Creating firewall...⠹Created [https://www.googleapis.com/compute/v1/projects/otus-kuber-278614/global/firewalls/test-node-port].                                                                    
+Creating firewall...done.                                                                                                                                                                           
+NAME            NETWORK  DIRECTION  PRIORITY  ALLOW      DENY  DISABLED
+test-node-port  default  INGRESS    1000      tcp:32145        False
+
+└─$> curl -v http://$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}'):$(kubectl get svc/frontend -n hipster-shop -o jsonpath={.spec.ports[0].nodePort})
+*   Trying 34.78.55.255:32145...
+* TCP_NODELAY set
+* Connected to 34.78.55.255 (34.78.55.255) port 32145 (#0)
+> GET / HTTP/1.1
+> Host: 34.78.55.255:32145
+> User-Agent: curl/7.68.0
+> Accept: */*
+...
+
+```
+
+2. Using ingress for example
+```
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: hipstershop-frontend
+spec:
+  rules:
+    - host: shop.YOUR_IP.nip.io
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: frontend
+              servicePort: 80
+
+└─$> curl http://$(kubectl get ingress frontend -n hipster-shop -o jsonpath={.spec.rules[0].host})              
+```
+
+#### Helm chart for frontend app
+
+Config in dir `frontend`.
+
+Update helm pkg dependencies
+```
+└─$> helm dep update ./hipster-shop
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "harbor" chart repository
+...Successfully got an update from the "jetstack" chart repository
+...Successfully got an update from the "chartmuseum" chart repository
+...Successfully got an update from the "stable" chart repository
+Update Complete. ⎈Happy Helming!⎈
+Saving 1 charts
+Deleting outdated charts
+```
+
+Test
+```
+└─$> helm upgrade --install frontend ./frontend/ --namespace hipster-shop
+Release "frontend" has been upgraded. Happy Helming!
+NAME: frontend
+LAST DEPLOYED: Sun May 31 20:53:16 2020
+NAMESPACE: hipster-shop
+STATUS: deployed
+REVISION: 7
+TEST SUITE: None
+```
+
+### Kubecfg
+
+Install `kubecfg` by using manual https://github.com/bitnami/kubecfg
+
+Jsonnet guestbook kubecfg:
+
+https://github.com/bitnami/kubecfg/blob/master/examples/guestbook.jsonnet
+
+https://github.com/bitnami-labs/kube-libsonnet/raw/52ba963ca44f7a4960aeae9ee0fbee44726e481f/kube.libsonnet
+
+#### Check
+
+```
+└─$> kubecfg show kubecfg/services.jsonnet 
+---
+apiVersion: v1
+kind: Service
+...
+```
+
+#### Install 
+
+```
+└─$> kubecfg update ./kubecfg/services.jsonnet --namespace hipster-shop
+INFO  Validating deployments paymentservice
+INFO  validate object "apps/v1beta2, Kind=Deployment"
+INFO  Validating services paymentservice
+INFO  validate object "/v1, Kind=Service"
+INFO  Validating deployments shippingservice
+INFO  validate object "apps/v1beta2, Kind=Deployment"
+INFO  Validating services shippingservice
+INFO  validate object "/v1, Kind=Service"
+INFO  Fetching schemas for 4 resources
+INFO  Creating services paymentservice
+INFO  Creating services shippingservice
+INFO  Creating deployments paymentservice
+INFO  Creating deployments shippingservice
+```
+
+All work fine!
+
+```
+└─$> helm ls -n hipster-shop
+NAME            NAMESPACE       REVISION        UPDATED                                 STATUS          CHART                   APP VERSION
+hipster-shop    hipster-shop    4               2020-06-01 14:28:24.588606156 +0300 MSK deployed        hipster-shop-0.1.0      1.16.0   
+
+└─$> curl http://$(kubectl get ingress hipstershop-frontend -n hipster-shop -o jsonpath={.spec.rules[0].host})
+
+<!DOCTYPE html>
+...
+    <title>Hipster Shop</title>
+...
+```
+![HipstershopPage](./kubernetes-templating/hipster-shop.png)
+
+### Kustomize
+
+https://kubectl.docs.kubernetes.io/pages/app_customization/introduction.html
+
+#### Run
+
+```
+└─$> kubectl apply -f ./kustomize/overlays/hipster-shop-prod/namespace.yaml 
+namespace/hipster-shop-prod created
+
+└─$> kubectl apply -k ./kustomize/overlays/hipster-shop-prod/
+service/prod-adservice created
+deployment.apps/prod-adservice created
+```
+
+#### Check
+
+```
+└─$> kubectl get service -n hipster-shop-prod
+NAME             TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
+prod-adservice   ClusterIP   10.8.11.177   <none>        9555/TCP   81s
+```
+
+
 ## HW-5 Volumes
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-volumes)
