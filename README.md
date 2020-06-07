@@ -3,6 +3,79 @@
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=master)
 
+## HW-8 Monitoring
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-monitoring)
+
+### How to use
+
+Clone repo. Change dir `cd kubernetes-monitoring`. Start minikube. Run commands bellow.
+
+### Prometheus-operator
+
+Install
+
+```
+└─$> helm upgrade --install prometheus-operator stable/prometheus-operator --create-namespace --namespace monitoring 
+Release "prometheus-operator" does not exist. Installing it now.
+...
+
+└─$> kubectl get pods -n monitoring
+NAME                                                     READY   STATUS    RESTARTS   AGE
+alertmanager-prometheus-operator-alertmanager-0          2/2     Running   0          92s
+prometheus-operator-grafana-64bcbf975f-mbdtj             2/2     Running   0          2m11s
+prometheus-operator-kube-state-metrics-5fdcd78bc-jj5wg   1/1     Running   0          2m11s
+prometheus-operator-operator-778d5d7b98-vkh55            2/2     Running   0          2m11s
+prometheus-operator-prometheus-node-exporter-k4wdv       1/1     Running   0          2m11s
+prometheus-prometheus-operator-prometheus-0              3/3     Running   1          82s
+```
+
+### Nginx app deployment
+
+```
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+kubectl apply -f servicemonitor.yaml
+
+└─$> kubectl get pods 
+NAME                    READY   STATUS    RESTARTS   AGE
+nginx-cc94594f8-ggtz5   2/2     Running   0          4m37s
+nginx-cc94594f8-kddn9   2/2     Running   0          4m37s
+nginx-cc94594f8-vrqzr   2/2     Running   0          4m37s
+
+└─$> kubectl get service
+NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                       AGE
+kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP                       9m41s
+nginx-app    NodePort    10.96.114.211   <none>        80:31978/TCP,9113:31605/TCP   4m47s
+```
+
+#### Port forward for test
+```
+kubectl port-forward service/prometheus-operator-grafana -n monitoring 3000:80&
+kubectl port-forward service/nginx-app 9113:9113&
+kubectl port-forward service/prometheus-operator-prometheus -n monitoring 9090:9090&
+```
+
+#### Grafana
+
+##### !Tips! 
+
+Get Graffana password.
+```
+─$> kubectl get secret prometheus-operator-grafana -o jsonpath='{.data.admin-password}' -n monitoring| base64 --decode
+prom-operator
+```
+Install this dashboard in grafana https://github.com/nginxinc/nginx-prometheus-exporter/tree/master/grafana
+
+### Results
+
+Now we can see:
+
+![GrafanaPage](./kubernetes-monitoring/grafana.png)
+![MetricsPage](./kubernetes-monitoring/metrics.png)
+![PrometheusPage](./kubernetes-monitoring/prometheus.png)
+
+
 ## HW-7 Operators
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-operators)
