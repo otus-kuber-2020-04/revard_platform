@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+     app: nginx
+  template:
+    metadata:
+      name: nginx
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: revard/otus-k8s-nginx-monitoring:v0.0.1
+        livenessProbe:
+          tcpSocket:
+            port: 80
+        readinessProbe:
+          httpGet:
+            path: /index.html
+            port: 80
+      - name: nginx-exporter
+        image: nginx/nginx-prometheus-exporter:0.7.0
+        args:
+        - "-nginx.scrape-uri"
+        - "http://localhost/basic_status"
