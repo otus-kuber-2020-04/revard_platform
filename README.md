@@ -3,6 +3,173 @@
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=master)
 
+## HW-9 Logging
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-logging)
+
+### How to use
+
+Clone repo. Change dir `cd kubernetes-logging`. Start gce k8s. Run `run.sh`or commands bellow.
+
+### GCE cluster
+
+We need two pools: 
+
+* default-pool 1 node
+
+* infra-pool 3 nodes (taint GCP: node-role=infra:NoSchedule)
+
+##### Tips 
+
+```
+# GCE taint
+kubectl taint nodes gke-cluster-1-infra-pool-146ddf2e-4vj3 node-role=infra:NoSchedule
+# Untaint
+kubectl taint nodes gke-cluster-1-infra-pool-146ddf2e-4vj3  node-role:NoSchedule-
+```
+
+```
+└─$> kubectl get nodes
+NAME                                       STATUS   ROLES    AGE   VERSION
+gke-cluster-1-default-pool-d3df1154-fp3r   Ready    <none>   18m   v1.14.10-gke.36
+gke-cluster-1-infra-pool-14425da5-bwlh     Ready    <none>   18m   v1.14.10-gke.36
+gke-cluster-1-infra-pool-14425da5-cjw9     Ready    <none>   18m   v1.14.10-gke.36
+gke-cluster-1-infra-pool-14425da5-jfjg     Ready    <none>   18m   v1.14.10-gke.36
+```
+
+### Hipster-shop
+
+#### Install
+
+```
+└─$> kubectl create ns microservices-demo
+namespace/microservices-demo created
+
+└─$> kubectl apply -f https://raw.githubusercontent.com/express42/otus-platform-snippets/master/Module-02/Logging/microservices-demo-without-resources.yaml -n microservices-demo
+deployment.apps/emailservice created
+service/emailservice created
+deployment.apps/checkoutservice created
+...
+
+└─$> kubectl get pods -n microservices-demo -o wide
+NAME                                     READY   STATUS              RESTARTS   AGE   IP           NODE                                       NOMINATED NODE   READINESS GATES
+adservice-6898984d4c-wltk8               0/1     ContainerCreating   0          59s   <none>       gke-cluster-1-default-pool-d3df1154-fp3r   <none>           <none>
+cartservice-86854d9586-xlc89             0/1     Completed           0          60s   10.60.2.12   gke-cluster-1-default-pool-d3df1154-fp3r   <none>           <none>
+checkoutservice-85597d98b5-ltsft         1/1     Running             0          62s   10.60.2.9    gke-cluster-1-default-pool-d3df1154-fp3r   <none>           <none>
+...
+```
+
+### ELK
+
+#### Helm chart 
+
+https://github.com/elastic/helm-charts
+
+```
+helm repo add elastic https://helm.elastic.co
+
+kubectl create ns observability
+
+# ElasticSearch
+helm upgrade --install elasticsearch elastic/elasticsearch --namespace observability -f elasticsearch.values.yaml 
+# Kibana
+helm upgrade --install kibana elastic/kibana --namespace observability -f kibana.values.yaml 
+# Fluent Bit
+helm upgrade --install fluent-bit stable/fluent-bit --namespace observability -f fluentbit.values.yaml 
+```
+
+```
+└─$> kubectl get pods -n observability -o wide -l chart=elasticsearch
+NAME                     READY   STATUS    RESTARTS   AGE     IP          NODE                                     NOMINATED NODE   READINESS GATES
+elasticsearch-master-0   1/1     Running   0          3m19s   10.20.3.2   gke-cluster-1-infra-pool-146ddf2e-kmtp   <none>           <none>
+elasticsearch-master-1   1/1     Running   0          3m19s   10.20.1.2   gke-cluster-1-infra-pool-146ddf2e-5mgh   <none>           <none>
+elasticsearch-master-2   1/1     Running   0          3m18s   10.20.0.2   gke-cluster-1-infra-pool-146ddf2e-4vj3   <none>           <none>
+```
+
+#### Nginx-ingress
+
+```
+kubectl create ns nginx-ingress
+helm upgrade --install nginx-ingress stable/nginx-ingress --namespace=nginx-ingress -f nginx-ingress.values.yaml
+```
+![ElkPage](./kubernetes-logging/elk_dashboard.png)
+
+#### Kibana
+
+Web page by http://kibana.34.89.8.127.xip.io/
+
+#### Fluent-bit
+
+https://fluentbit.io/documentation/0.13/output/elasticsearch.html
+
+https://github.com/helm/charts/blob/master/stable/fluent-bit/values.yaml
+
+Duplicate @timestamp fields in elasticsearch output issue - https://github.com/fluent/fluent-bit/issues/628
+
+
+### Monitoring 
+
+#### Prometheus elasticsearch-exporter
+
+https://github.com/justwatchcom/elasticsearch_exporter
+
+```
+helm upgrade --install prometheus-operator stable/prometheus-operator --namespace=observability
+
+helm upgrade --install elasticsearch-exporter stable/elasticsearch-exporter --set es.uri=http://elasticsearch-master:9200 --set serviceMonitor.enabled=true --namespace=observability
+```
+
+Access grafana webpage (admin/prom-operator):
+```
+kubectl port-forward service/prometheus-operator-grafana 3000:80&
+```
+
+Install dashboard https://grafana.com/grafana/dashboards/4358
+
+![GrafanaPage](./kubernetes-logging/grafana_elk_dashboard.png)
+
+#### Loki
+
+```
+└─$> helm repo add loki https://grafana.github.io/loki/charts
+"loki" has been added to your repositories
+
+└─$> helm upgrade --install loki loki/loki-stack --namespace observability -f loki.values.yaml
+```
+![LokiPage](./kubernetes-logging/loki.png)
+
+#### Status
+
+```
+└─$> kubectl get pods -n observability 
+NAME                                                      READY   STATUS    RESTARTS   AGE
+alertmanager-prometheus-operator-alertmanager-0           2/2     Running   0          3h23m
+elasticsearch-exporter-c868cd459-6sn9j                    1/1     Running   0          3h19m
+elasticsearch-master-0                                    1/1     Running   0          3h32m
+elasticsearch-master-1                                    1/1     Running   0          3h32m
+elasticsearch-master-2                                    1/1     Running   0          3h32m
+fluent-bit-g5vsn                                          1/1     Running   0          3h26m
+fluent-bit-zxjzq                                          1/1     Running   0          3h32m
+kibana-kibana-b5b59bc46-dwsxg                             1/1     Running   0          3h32m
+loki-0                                                    1/1     Running   0          127m
+loki-promtail-58n9n                                       1/1     Running   0          127m
+loki-promtail-lcqzm                                       1/1     Running   0          127m
+loki-promtail-qlhfs                                       1/1     Running   0          127m
+loki-promtail-zf2vk                                       1/1     Running   0          127m
+prometheus-operator-grafana-6bc65b8fb6-69lgx              2/2     Running   0          3h23m
+prometheus-operator-kube-state-metrics-59dd6cc4f8-trwrr   1/1     Running   0          3h29m
+prometheus-operator-operator-8547d85c6f-q8ldv             2/2     Running   0          3h29m
+prometheus-operator-prometheus-node-exporter-7fl76        1/1     Running   0          3h29m
+prometheus-operator-prometheus-node-exporter-cqpnx        1/1     Running   0          3h29m
+prometheus-operator-prometheus-node-exporter-s6kdm        1/1     Running   0          3h29m
+prometheus-operator-prometheus-node-exporter-vtk85        1/1     Running   0          3h29m
+prometheus-prometheus-operator-prometheus-0               3/3     Running   1          3h27m
+```
+
+#####  Tip useful util
+
+Event logging | k8s-event-logger  https://github.com/max-rocket-internet/k8s-event-logger
+
 ## HW-8 Monitoring
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-monitoring)
@@ -55,6 +222,9 @@ kubectl port-forward service/prometheus-operator-grafana -n monitoring 3000:80&
 kubectl port-forward service/nginx-app 9113:9113&
 kubectl port-forward service/prometheus-operator-prometheus -n monitoring 9090:9090&
 ```
+
+
+kubernetes.labels.app : nginx-ingress and status >= 200 and status <= 299
 
 #### Grafana
 
