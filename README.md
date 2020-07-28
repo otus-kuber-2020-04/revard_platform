@@ -5,6 +5,271 @@
 
 ---
 
+## HW-11 Gitops
+
+![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-gitops)
+
+### How to use
+
+Clone repo. Change dir `cd kubernetes-gitops`. Run `gkecluster.sh` to create GKE cluster.
+
+### Helm chart
+
+```
+git clone https://github.com/GoogleCloudPlatform/microservices-demo
+cd microservices-demo
+git remote add gitlab git@gitlab.com:<YOUR_LOGIN>/microservices-demo.git
+git remote remove origin
+git push gitlab master
+```
+
+```
+└─$> tree -L 1 deploy/charts
+deploy/charts
+├── adservice
+├── cartservice
+├── checkoutservice
+├── currencyservice
+├── emailservice
+├── frontend
+├── grafana-load-dashboards
+├── loadgenerator
+├── paymentservice
+├── productcatalogservice
+├── recommendationservice
+└── shippingservice
+```
+
+### Installing Istio on GKE
+
+```
+gcloud container clusters get-credentials standart-cluster-1 --zone europe-west4-a --project otus-kuber-278614
+gcloud container clusters list
+gcloud beta container clusters update standart-cluster-1 --update-addons=Istio=ENABLED --istio-config=auth=MTLS_PERMISSIVE --region=europe-west4-a    
+```
+
+### Continuous Integration
+
+#### Create images
+
+Using make file let`s create images and push to repo.
+
+```
+make
+make release
+```
+
+#### Flux
+
+```
+kubectl apply -f https://raw.githubusercontent.com/fluxcd/helm-operator/master/deploy/crds.yaml
+helm repo add fluxcd https://charts.fluxcd.io
+kubectl create namespace flux
+helm upgrade --install flux fluxcd/flux -f flux.values.yaml --namespace flux
+helm upgrade --install helm-operator fluxcd/helm-operator -f helm-operator.values.yaml --namespace flux
+```
+
+Install `fluxctl` using https://docs.fluxcd.io/en/1.19.0/references/fluxctl/
+
+Add public key to Gitlab `fluxctl identity --k8s-fwd-ns flux`
+
+
+#### Check flux
+
+Create manifest for namespace microservices-demo in dir `deploy/namespaces` and make push to Gitlab.
+
+If all is correct we will get:
+```
+└─$> kubectl get ns microservices-demo
+NAME                 STATUS   AGE
+microservices-demo   Active   109s
+
+└─$> kubectl logs -l app=flux -n flux | grep microservices-demo | grep created
+ts=2020-07-07T14:55:33.022824276Z caller=sync.go:605 method=Sync cmd="kubectl apply -f -" took=807.478119ms err=null output="namespace/microservices-demo unchanged\nhelmrelease.helm.fluxcd.io/frontend created"
+```
+
+### Helm Release
+
+#### Check helm chart 
+
+https://docs.fluxcd.io/en/latest/references/helm-operator-integration.html
+
+
+Lets see that HelmRelease for frontend (microservices-demo/deploy/charts/frontend/) is up. 
+
+```
+$> kubectl get helmrelease -n microservices-demo
+NAME       RELEASE    PHASE       STATUS     MESSAGE                                                                       AGE
+frontend   frontend   Succeeded   deployed   Release was successful for Helm release 'frontend' in 'microservices-demo'.   12m
+
+$> helm list -n microservices-demo
+NAME            NAMESPACE               REVISION        UPDATED                                 STATUS          CHART           APP VERSION
+frontend        microservices-demo      1               2020-07-09 14:05:20.076294456 +0000 UTC deployed        frontend-0.21.0 1.16.0     
+
+$> kubectl describe helmrelease -n microservices-demo 
+```
+
+For manual sync `fluxctl --k8s-fwd-ns flux sync`
+
+#### Image update
+
+Change frontend source, build new image frontend:v0.0.2 and push to docker repo.
+
+Check status:
+```
+$> helm history frontend -n microservices-demo
+REVISION        UPDATED                         STATUS          CHART           APP VERSION     DESCRIPTION     
+1               Thu Jul  9 14:05:20 2020        superseded      frontend-0.21.0 1.16.0          Install complete
+2               Thu Jul  9 14:47:23 2020        deployed        frontend-0.21.0 1.16.0          Upgrade complete
+```
+
+And we can see new `tag: v0.0.2` in git repo `microservices-demo/deploy/releases/frontend.yaml`.
+
+#### Update Heml chart
+
+After cahange deployment name in frontend chart we push to gitlab and can see result.
+
+```
+$> kubectl get deployment -n microservices-demo 
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+frontend-hipster   1/1     1            1           38s
+
+$> kubectl logs -l app=helm-operator -n flux
+ts=2020-07-09T15:13:45.83063727Z caller=helm.go:69 component=helm version=v3 info="performing update for frontend" targetNamespace=microservices-demo release=frontend
+ts=2020-07-09T15:13:45.844395557Z caller=helm.go:69 component=helm version=v3 info="creating upgraded release for frontend" targetNamespace=microservices-demo release=frontend
+ts=2020-07-09T15:13:45.857466333Z caller=helm.go:69 component=helm version=v3 info="checking 4 resources for changes" targetNamespace=microservices-demo release=frontend
+ts=2020-07-09T15:13:45.863002201Z caller=helm.go:69 component=helm version=v3 info="Looks like there are no changes for Service \"frontend\"" targetNamespace=microservices-demo release=frontend
+ts=2020-07-09T15:13:45.872422503Z caller=helm.go:69 component=helm version=v3 info="Created a new Deployment called \"frontend-hipster\" in microservices-demo\n" targetNamespace=microservices-demo release=frontend
+ts=2020-07-09T15:13:45.880008395Z caller=helm.go:69 component=helm version=v3 info="Looks like there are no changes for Gateway \"frontend-gateway\"" targetNamespace=microservices-demo release=frontend
+ts=2020-07-09T15:13:45.90441469Z caller=helm.go:69 component=helm version=v3 info="Looks like there are no changes for VirtualService \"frontend\"" targetNamespace=microservices-demo release=frontend
+ts=2020-07-09T15:13:45.906674525Z caller=helm.go:69 component=helm version=v3 info="Deleting \"frontend\" in microservices-demo..." targetNamespace=microservices-demo release=frontend
+ts=2020-07-09T15:13:45.940126143Z caller=helm.go:69 component=helm version=v3 info="updating status for upgraded release for frontend" targetNamespace=microservices-demo release=frontend
+ts=2020-07-09T15:13:46.017900107Z caller=release.go:309 component=release release=frontend targetNamespace=microservices-demo resource=microservices-demo:helmrelease/frontend helmVersion=v3 info="upgrade succeeded" revision=520032b7683c389495c9ba057d0630ab5186420b phase=upgrade
+```
+
+We can install nginx-ingress for proper work of frontend and loadgenerator.
+
+```
+$> helm upgrade --install nginx-ingress stable/nginx-ingress --wait --namespace=nginx-ingress --create-namespace
+```
+
+After adding release files for all services.
+
+```
+$> kubectl get helmrelease -n microservices-demo
+NAME                    RELEASE                 PHASE       STATUS     MESSAGE                                                                                    AGE
+adservice               adservice               Succeeded   deployed   Release was successful for Helm release 'adservice' in 'microservices-demo'.               6m32s
+cartservice             cartservice             Succeeded   deployed   Release was successful for Helm release 'cartservice' in 'microservices-demo'.             6m32s
+checkoutservice         checkoutservice         Succeeded   deployed   Release was successful for Helm release 'checkoutservice' in 'microservices-demo'.         6m32s
+currencyservice         currencyservice         Succeeded   deployed   Release was successful for Helm release 'currencyservice' in 'microservices-demo'.         6m32s
+emailservice            emailservice            Succeeded   deployed   Release was successful for Helm release 'emailservice' in 'microservices-demo'.            6m31s
+frontend                frontend                Succeeded   deployed   Release was successful for Helm release 'frontend' in 'microservices-demo'.                6m31s
+loadgenerator           loadgenerator           Succeeded   deployed   Release was successful for Helm release 'loadgenerator' in 'microservices-demo'.           6m31s
+paymentservice          paymentservice          Succeeded   deployed   Release was successful for Helm release 'paymentservice' in 'microservices-demo'.          6m31s
+productcatalogservice   productcatalogservice   Succeeded   deployed   Release was successful for Helm release 'productcatalogservice' in 'microservices-demo'.   6m31s
+recommendationservice   recommendationservice   Succeeded   deployed   Release was successful for Helm release 'recommendationservice' in 'microservices-demo'.   6m30s
+shippingservice         shippingservice         Succeeded   deployed   Release was successful for Helm release 'shippingservice' in 'microservices-demo'.         6m30s
+```
+
+!Tip!
+
+fluxctl useful commands
+
+```
+export FLUX_FORWARD_NAMESPACE = flux environment variable, pointing to the namespace where flux is installed (alternative switch --k8s-fwd-ns <flux installation ns>) 
+fluxctl list-workloads -a show all workloads that are in the flux line of sight
+fluxctl list-images -n microservices-demo - see all Docker images used in the cluster (in namespace microservicesdemo)
+fluxctl automate / deautomate - enable / disable automation workload control
+fluxctl policy -w microservices-demo: helmrelease / frontend - tag-all = 'semver: ~ 0.1' - set all services to workload microservices-demo: helmrelease / frontend policy for updating images from Registry based on semantic versioning with mask 0.1. *
+fluxctl sync - forcibly start synchronizing the state of the git repository with the cluster
+fluxctl release --workload = microservicesdemo: helmrelease / frontend --update-all-images - force initiate a Registry scan for fresh Docker images
+```
+
+### Canary deployments with Flagger and Istio
+
+#### Flagger
+
+https://docs.flagger.app/install/flagger-install-on-google-cloud
+
+Install
+```
+helm repo add flagger https://flagger.app
+kubectl apply -f https://raw.githubusercontent.com/weaveworks/flagger/master/artifacts/flagger/crd.yaml
+helm upgrade --install flagger flagger/flagger \
+--namespace=istio-system \
+--set crd.create=false \
+--set meshProvider=istio \
+--set metricsServer=http://prometheus:9090
+
+$> kubectl get ns microservices-demo --show-labels
+NAME                 STATUS   AGE   LABELS
+microservices-demo   Active   10m   fluxcd.io/sync-gc-mark=sha256.WYAIenGxNnvEet48sUnmtlM7DhPRegedpspN2BT6oTM
+```
+
+For adding sidecar the simples way to delete all pods.
+```
+kubectl delete pods --all -n microservices-demo
+kubectl describe pod -l app=frontend -n microservices-demo
+```
+
+#### Istio | Gateway
+
+```
+$>  kubectl get gateway -n microservices-demo
+NAME               AGE
+frontend-gateway   29m
+
+$> kubectl get svc istio-ingressgateway -n istio-system
+NAME                   TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)                                                                                                                                      AGE
+istio-ingressgateway   LoadBalancer   10.59.255.88   35.204.141.69   15020:30989/TCP,80:30242/TCP,443:32639/TCP,31400:32689/TCP,15029:31236/TCP,15030:31598/TCP,15031:30508/TCP,15032:31608/TCP,15443:30699/TCP   35m
+```
+
+#### Prometheus & Grafana
+
+```
+#$> wget https://storage.googleapis.com/gke-release/istio/release/1.0.6-gke.1/patches/install-prometheus.yaml
+$> kubectl -n istio-system apply -f install-prometheus.yaml
+
+$>helm upgrade -i flagger-grafana flagger/grafana \
+--namespace=istio-system \
+--set url=http://prometheus:9090 \
+--set user=admin \
+--set password=admin
+
+$> kubectl apply -f grafana-virtual-service.yaml 
+```
+
+#### Flagger | Canary
+
+```
+$> kubectl get canaries -n microservices-demo
+NAME       STATUS      WEIGHT   LASTTRANSITIONTIME
+frontend   Succeeded   0        2020-07-25T14:33:31Z
+
+$>  kubectl get pods -n microservices-demo -l app=frontend-primary
+NAME                                READY   STATUS    RESTARTS   AGE
+frontend-primary-77bfd45776-k49ft   2/2     Running   0          8m59s
+```
+
+After create new frontend image v0.0.3 we have "Promotion completed"!
+
+```
+$> kubectl describe canary -n microservices-demo 
+...
+  Normal   Synced  3m46s (x2 over 16m)  flagger  New revision detected! Scaling up frontend.microservices-demo
+  Normal   Synced  3m15s (x2 over 15m)  flagger  Starting canary analysis for frontend.microservices-demo
+  Normal   Synced  3m15s (x2 over 15m)  flagger  Advance frontend.microservices-demo canary weight 10
+  Normal   Synced  2m45s                flagger  Advance frontend.microservices-demo canary weight 20
+  Normal   Synced  2m15s                flagger  Advance frontend.microservices-demo canary weight 30
+  Normal   Synced  106s                 flagger  Copying frontend.microservices-demo template spec to frontend-primary.microservices-demo
+  Normal   Synced  75s                  flagger  Routing all traffic to primary
+  Normal   Synced  46s                  flagger  Promotion completed! Scaling down frontend.microservices-demo
+```
+
+![GrafanaPage](./kubernetes-gitops/grafana.png)
+
+---
+
 ## HW-10 Hashicorp Vault
 
 ![Build Status](https://api.travis-ci.com/otus-kuber-2020-04/revard_platform.svg?branch=kubernetes-vault)
